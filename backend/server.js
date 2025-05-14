@@ -6,11 +6,12 @@ import callRoutes from './routes/call.js';
 // Load environment variables
 dotenv.config();
 
+
 // Debug logging
-console.log('Environment variables loaded:');
-console.log('TWILIO_ACCOUNT_SID:', process.env.TWILIO_ACCOUNT_SID ? 'Present' : 'Missing');
-console.log('TWILIO_AUTH_TOKEN:', process.env.TWILIO_AUTH_TOKEN ? 'Present' : 'Missing');
-console.log('TWILIO_PHONE_NUMBER:', process.env.TWILIO_PHONE_NUMBER ? 'Present' : 'Missing');
+// console.log('Environment variables loaded:');
+// console.log('TWILIO_ACCOUNT_SID:', process.env.TWILIO_ACCOUNT_SID ? 'Present' : 'Missing');
+// console.log('TWILIO_AUTH_TOKEN:', process.env.TWILIO_AUTH_TOKEN ? 'Present' : 'Missing');
+// console.log('TWILIO_PHONE_NUMBER:', process.env.TWILIO_PHONE_NUMBER ? 'Present' : 'Missing');
 
 // Log the actual values (partially masked)
 if (process.env.TWILIO_ACCOUNT_SID) {
@@ -23,7 +24,7 @@ if (process.env.TWILIO_AUTH_TOKEN) {
 const app = express();
 app.use(cors());
 app.use(express.json());
-
+app.use(express.urlencoded({ extended: false }));
 app.use('/api/call', callRoutes);
 
 const PORT = process.env.PORT || 5000;
