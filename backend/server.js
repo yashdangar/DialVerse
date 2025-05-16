@@ -3,6 +3,16 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import callRoutes from './routes/call.js';
 import twilio from 'twilio';
+import axios from 'axios';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// ES Module __dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 // Load environment variables
 dotenv.config();
 
@@ -40,11 +50,11 @@ app.post('/', (req, res) => {
     // First say something to the caller
     twiml.say('Please wait while we connect your call');
 
-    // Create the dial verb
+    // Create the dial verb with recording enabled
     const dial = twiml.dial({
       callerId: process.env.TWILIO_PHONE_NUMBER,
       timeout: 30,
-      record: 'record-from-answer',
+      record: 'record-from-answer-dual',
       recordingStatusCallback: '/recording-status',
       recordingStatusCallbackEvent: 'completed',
       recordingStatusCallbackMethod: 'POST',
@@ -79,14 +89,43 @@ app.post('/', (req, res) => {
 });
 
 // Handle recording status
-app.post('/recording-status', (req, res) => {
+app.post('/recording-status', async (req, res) => {
   try {
     console.log('Recording status update:', req.body);
     const recordingUrl = req.body.RecordingUrl;
     const recordingSid = req.body.RecordingSid;
     const recordingStatus = req.body.RecordingStatus;
     
-    // You can store the recording URL and SID in your database here
+    if (!recordingUrl) {
+      return res.status(400).send('Recording URL is missing.');
+    }
+
+    // Download the recording file
+    try {
+      const response = await axios.get(recordingUrl, {
+        responseType: 'stream',
+        auth: {
+          username: process.env.TWILIO_ACCOUNT_SID,
+          password: process.env.TWILIO_AUTH_TOKEN,
+        },
+      });
+
+      const filePath = path.resolve(__dirname, `recordings/${recordingSid}.mp3`);
+      const writer = fs.createWriteStream(filePath);
+
+      response.data.pipe(writer);
+
+      writer.on('finish', () => {
+        console.log('Recording saved to:', filePath);
+      });
+
+      writer.on('error', (err) => {
+        console.error('Error saving recording:', err);
+      });
+    } catch (error) {
+      console.error('Error downloading recording:', error.message);
+    }
+
     console.log(`Recording ${recordingSid} status: ${recordingStatus}`);
     console.log(`Recording URL: ${recordingUrl}`);
 
