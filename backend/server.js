@@ -8,6 +8,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { ElevenLabsClient } from 'elevenlabs';
+import FormData from 'form-data';
 
 // ES Module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -16,6 +18,10 @@ const __dirname = dirname(__filename);
 // Load environment variables
 dotenv.config();
 
+// Initialize ElevenLabs client
+const elevenLabsClient = new ElevenLabsClient({
+  apiKey: process.env.ELEVENLABS_API_KEY
+});
 
 // Debug logging
 // console.log('Environment variables loaded:');
@@ -115,8 +121,47 @@ app.post('/recording-status', async (req, res) => {
 
       response.data.pipe(writer);
 
-      writer.on('finish', () => {
+      writer.on('finish', async () => {
         console.log('Recording saved to:', filePath);
+        
+        try {
+          console.log('Starting transcription process...');
+          console.log('Reading file from:', filePath);
+
+          // Create form data
+          const formData = new FormData();
+          formData.append('file', fs.createReadStream(filePath), {
+            filename: `${recordingSid}.mp3`,
+            contentType: 'audio/mpeg'
+          });
+          formData.append('model_id', 'scribe_v1');
+
+          // Convert speech to text using ElevenLabs
+          const transcription = await axios.post(
+            'https://api.elevenlabs.io/v1/speech-to-text',
+            formData,
+            {
+              headers: {
+                'xi-api-key': process.env.ELEVENLABS_API_KEY,
+                ...formData.getHeaders()
+              },
+              maxBodyLength: Infinity,
+              maxContentLength: Infinity
+            }
+          );
+
+          console.log('Transcription response:', transcription.data);
+          
+          // Save the transcription to a text file
+          const transcriptionPath = path.resolve(__dirname, `recordings/${recordingSid}.txt`);
+          fs.writeFileSync(transcriptionPath, transcription.data.text);
+          console.log('Transcription saved to:', transcriptionPath);
+          console.log('Transcription content:', transcription.data.text);
+        } catch (transcriptionError) {
+          console.error('Error transcribing recording:', transcriptionError.message);
+          console.error('Error details:', transcriptionError.response?.data || 'No response data');
+          console.error('Full error:', transcriptionError);
+        }
       });
 
       writer.on('error', (err) => {
@@ -307,6 +352,67 @@ app.post('/api/hangup', async (req, res) => {
   } catch (error) {
     console.error('Error hanging up call:', error);
     res.status(500).json({ error: 'Failed to hang up call' });
+  }
+});
+
+// Add test endpoint for transcription
+app.get('/test-transcribe', async (req, res) => {
+  try {
+    // Get the first MP3 file from the recordings directory
+    const recordingsDir = path.resolve(__dirname, 'recordings');
+    const files = fs.readdirSync(recordingsDir);
+    const mp3File = files.find(file => file.endsWith('.mp3'));
+    
+    if (!mp3File) {
+      return res.status(404).json({ error: 'No MP3 files found in recordings directory' });
+    }
+
+    const filePath = path.join(recordingsDir, mp3File);
+    console.log('Testing transcription with file:', filePath);
+
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(filePath), {
+      filename: mp3File,
+      contentType: 'audio/mpeg'
+    });
+    formData.append('model_id', 'scribe_v1');
+
+    // Convert speech to text using ElevenLabs
+    const transcription = await axios.post(
+      'https://api.elevenlabs.io/v1/speech-to-text',
+      formData,
+      {
+        headers: {
+          'xi-api-key': process.env.ELEVENLABS_API_KEY,
+          ...formData.getHeaders()
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity
+      }
+    );
+
+    console.log('Transcription response:', transcription.data);
+    
+    // Save the transcription to a text file
+    const transcriptionPath = path.join(recordingsDir, mp3File.replace('.mp3', '.txt'));
+    fs.writeFileSync(transcriptionPath, transcription.data.text);
+    console.log('Transcription saved to:', transcriptionPath);
+    
+    res.json({
+      success: true,
+      message: 'Transcription completed',
+      transcription: transcription.data.text,
+      file: mp3File
+    });
+  } catch (error) {
+    console.error('Error in test transcription:', error.message);
+    console.error('Error details:', error.response?.data || 'No response data');
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      details: error.response?.data || 'No response data'
+    });
   }
 });
 
