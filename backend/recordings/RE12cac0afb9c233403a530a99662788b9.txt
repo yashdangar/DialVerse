@@ -1,1 +1,1 @@
-Transcription checking. Is it working or not? Save transcription to text. File. Call for transcription completion.
+Transcription checking, is it working or not? Save transcription to text file, hold for transcription completion.

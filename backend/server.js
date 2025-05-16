@@ -128,21 +128,18 @@ app.post('/recording-status', async (req, res) => {
           console.log('Starting transcription process...');
           console.log('Reading file from:', filePath);
 
-          // Create form data
+          // Create form data for OpenAI
           const formData = new FormData();
-          formData.append('file', fs.createReadStream(filePath), {
-            filename: `${recordingSid}.mp3`,
-            contentType: 'audio/mpeg'
-          });
-          formData.append('model_id', 'scribe_v1');
+          formData.append('file', fs.createReadStream(filePath));
+          formData.append('model', 'whisper-1');
 
-          // Convert speech to text using ElevenLabs
+          // Convert speech to text using OpenAI Whisper
           const transcription = await axios.post(
-            'https://api.elevenlabs.io/v1/speech-to-text',
+            'https://api.openai.com/v1/audio/transcriptions',
             formData,
             {
               headers: {
-                'xi-api-key': process.env.ELEVENLABS_API_KEY,
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
                 ...formData.getHeaders()
               },
               maxBodyLength: Infinity,
@@ -370,21 +367,18 @@ app.get('/test-transcribe', async (req, res) => {
     const filePath = path.join(recordingsDir, mp3File);
     console.log('Testing transcription with file:', filePath);
 
-    // Create form data
+    // Create form data for OpenAI
     const formData = new FormData();
-    formData.append('file', fs.createReadStream(filePath), {
-      filename: mp3File,
-      contentType: 'audio/mpeg'
-    });
-    formData.append('model_id', 'scribe_v1');
+    formData.append('file', fs.createReadStream(filePath));
+    formData.append('model', 'whisper-1');
 
-    // Convert speech to text using ElevenLabs
+    // Convert speech to text using OpenAI Whisper
     const transcription = await axios.post(
-      'https://api.elevenlabs.io/v1/speech-to-text',
+      'https://api.openai.com/v1/audio/transcriptions',
       formData,
       {
         headers: {
-          'xi-api-key': process.env.ELEVENLABS_API_KEY,
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
           ...formData.getHeaders()
         },
         maxBodyLength: Infinity,
