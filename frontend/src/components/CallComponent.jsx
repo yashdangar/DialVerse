@@ -8,6 +8,7 @@ const CallComponent = () => {
   const [status, setStatus] = useState('Initializing...');
   const [currentCall, setCurrentCall] = useState(null);
   const [callSid, setCallSid] = useState(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   useEffect(() => {
     const initDevice = async () => {
@@ -67,14 +68,21 @@ const CallComponent = () => {
 
   const makeCall = async () => {
     try {
-      if (device) {
-        console.log('Placing call to: +919313932890');
-        const connection = await device.connect({ To: '+919313932890' });
+      if (device && phoneNumber) {
+        console.log('Placing call to:', phoneNumber);
+        const connection = await device.connect({ 
+          To: phoneNumber,
+          params: {
+            To: phoneNumber
+          }
+        });
         console.log('Call connection:', connection);
         setCallActive(true);
         setCurrentCall(connection);
         setCallSid(connection.parameters.CallSid);
         setStatus('Call in progress...');
+      } else if (!phoneNumber) {
+        setStatus('Please enter a phone number');
       }
     } catch (error) {
       console.error('Error making call:', error);
@@ -124,24 +132,34 @@ const CallComponent = () => {
     <div className="flex flex-col items-center gap-4 p-8">
       <h2 className="text-2xl font-bold">📞 Web Call via Twilio</h2>
       <p className="text-gray-600">{status}</p>
-      <div className="flex gap-4">
-        <button
-          onClick={makeCall}
+      <div className="flex flex-col gap-4 w-full max-w-md">
+        <input
+          type="tel"
+          value={phoneNumber}
+          onChange={(e) => setPhoneNumber(e.target.value)}
+          placeholder="Enter phone number (e.g., +1234567890)"
+          className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
           disabled={callActive}
-          className="bg-green-600 text-white px-6 py-2 rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-        >
-          Call Now
-        </button>
-        <button
-          onClick={hangupCall}
-          className={`px-6 py-2 rounded-xl ${
-            callActive 
-              ? 'bg-red-600 text-white hover:bg-red-700' 
-              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
-          }`}
-        >
-          Hang Up
-        </button>
+        />
+        <div className="flex gap-4">
+          <button
+            onClick={makeCall}
+            disabled={callActive || !phoneNumber}
+            className="bg-green-600 text-white px-6 py-2 rounded-xl hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Call Now
+          </button>
+          <button
+            onClick={hangupCall}
+            className={`px-6 py-2 rounded-xl ${
+              callActive 
+                ? 'bg-red-600 text-white hover:bg-red-700' 
+                : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+            }`}
+          >
+            Hang Up
+          </button>
+        </div>
       </div>
       <div className="mt-4 text-sm text-gray-500">
         <p>Call Active: {callActive ? 'Yes' : 'No'}</p>

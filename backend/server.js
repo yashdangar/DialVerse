@@ -51,8 +51,12 @@ app.post('/', (req, res) => {
       hangupOnStar: true
     });
 
-    // Add the number to dial with proper formatting
-    const receiverNumber = '+919313932890'; // Make sure this is in E.164 format
+    // Get the receiver number from the request body
+    const receiverNumber = req.body.To;
+    if (!receiverNumber) {
+      throw new Error('Receiver number is required');
+    }
+
     console.log('Dialing number:', receiverNumber);
     dial.number(receiverNumber, {
       statusCallback: '/call-status',
@@ -213,8 +217,12 @@ app.post('/voice', (req, res) => {
       hangupOnStar: true
     });
 
-    // Add the number to dial with proper formatting
-    const receiverNumber = '+919313932890'; // Make sure this is in E.164 format
+    // Get the receiver number from the request body
+    const receiverNumber = req.body.To;
+    if (!receiverNumber) {
+      throw new Error('Receiver number is required');
+    }
+
     console.log('Dialing number:', receiverNumber);
     dial.number(receiverNumber, {
       statusCallback: '/call-status',
