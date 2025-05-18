@@ -10,32 +10,27 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { ElevenLabsClient } from 'elevenlabs';
 import FormData from 'form-data';
+import { PrismaClient } from '@prisma/client';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { Readable } from 'stream';
+
+// Initialize Prisma client
+const prisma = new PrismaClient();
+
+// Initialize S3 client
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+  }
+});
 
 // ES Module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load environment variables
 dotenv.config();
-
-// Initialize ElevenLabs client
-const elevenLabsClient = new ElevenLabsClient({
-  apiKey: process.env.ELEVENLABS_API_KEY
-});
-
-// Debug logging
-// console.log('Environment variables loaded:');
-// console.log('TWILIO_ACCOUNT_SID:', process.env.TWILIO_ACCOUNT_SID ? 'Present' : 'Missing');
-// console.log('TWILIO_AUTH_TOKEN:', process.env.TWILIO_AUTH_TOKEN ? 'Present' : 'Missing');
-// console.log('TWILIO_PHONE_NUMBER:', process.env.TWILIO_PHONE_NUMBER ? 'Present' : 'Missing');
-
-// Log the actual values (partially masked)
-if (process.env.TWILIO_ACCOUNT_SID) {
-  console.log('Account SID format check:', process.env.TWILIO_ACCOUNT_SID.startsWith('AC'));
-}
-if (process.env.TWILIO_AUTH_TOKEN) {
-  console.log('Auth Token length:', process.env.TWILIO_AUTH_TOKEN.length);
-}
 
 const app = express();
 app.use(cors());
@@ -44,7 +39,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use('/api/call', callRoutes);
 
 // Handle voice calls at root path
-app.post('/', (req, res) => {
+app.post('/', async (req, res) => {
   try {
     console.log('Received voice webhook request at root path');
     console.log('Request body:', req.body);
@@ -73,6 +68,32 @@ app.post('/', (req, res) => {
       throw new Error('Receiver number is required');
     }
 
+    // Create or update phone number record
+    const phoneNumber = await prisma.phoneNumber.upsert({
+      where: { number: receiverNumber },
+      update: { 
+        lastCalled: new Date(),
+        callCount: { increment: 1 }
+      },
+      create: {
+        number: receiverNumber,
+        status: 'ACTIVE',
+        lastCalled: new Date(),
+        callCount: 1
+      }
+    });
+
+    // Create call record with the Twilio Call SID
+    const call = await prisma.call.create({
+      data: {
+        id: req.body.CallSid, // Use Twilio's CallSid as our call ID
+        status: 'INITIATED',
+        direction: 'OUTBOUND',
+        phoneNumberId: phoneNumber.id
+      }
+    });
+
+    console.log('Created call record:', call.id);
     console.log('Dialing number:', receiverNumber);
     dial.number(receiverNumber, {
       statusCallback: '/call-status',
@@ -101,9 +122,20 @@ app.post('/recording-status', async (req, res) => {
     const recordingUrl = req.body.RecordingUrl;
     const recordingSid = req.body.RecordingSid;
     const recordingStatus = req.body.RecordingStatus;
+    const callSid = req.body.CallSid;
     
     if (!recordingUrl) {
       return res.status(400).send('Recording URL is missing.');
+    }
+
+    // Verify that the call exists
+    const call = await prisma.call.findUnique({
+      where: { id: callSid }
+    });
+
+    if (!call) {
+      console.error(`Call ${callSid} not found in database`);
+      return res.status(404).send('Call not found');
     }
 
     // Download the recording file
@@ -116,21 +148,61 @@ app.post('/recording-status', async (req, res) => {
         },
       });
 
-      const filePath = path.resolve(__dirname, `recordings/${recordingSid}.mp3`);
-      const writer = fs.createWriteStream(filePath);
+      // Ensure temp directory exists
+      const tempDir = path.resolve(__dirname, 'temp');
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+        console.log('Created temp directory:', tempDir);
+      }
+
+      // Create a temporary file path
+      const tempFilePath = path.join(tempDir, `${recordingSid}.mp3`);
+      const writer = fs.createWriteStream(tempFilePath);
 
       response.data.pipe(writer);
 
       writer.on('finish', async () => {
-        console.log('Recording saved to:', filePath);
+        console.log('Recording downloaded to temp file:', tempFilePath);
         
+        let recording;
         try {
-          console.log('Starting transcription process...');
-          console.log('Reading file from:', filePath);
+          // Upload to S3
+          const fileStream = fs.createReadStream(tempFilePath);
+          const s3Key = `recordings/${recordingSid}.mp3`;
+          
+          if (!process.env.AWS_S3_BUCKET) {
+            throw new Error('AWS_S3_BUCKET environment variable is not set');
+          }
 
+          const uploadParams = {
+            Bucket: process.env.AWS_S3_BUCKET,
+            Key: s3Key,
+            Body: fileStream,
+            ContentType: 'audio/mpeg'
+          };
+
+          await s3Client.send(new PutObjectCommand(uploadParams));
+          
+          // Generate S3 URL
+          const s3Url = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
+          
+          // Create recording record
+          recording = await prisma.recording.create({
+            data: {
+              callId: callSid, // Use the verified call ID
+              fileUrl: s3Url,
+              fileSize: fs.statSync(tempFilePath).size,
+              duration: req.body.RecordingDuration ? parseInt(req.body.RecordingDuration) : null
+            }
+          });
+          
+          console.log('Recording record created:', recording.id);
+          
+          console.log('Starting transcription process...');
+          
           // Create form data for OpenAI
           const formData = new FormData();
-          formData.append('file', fs.createReadStream(filePath));
+          formData.append('file', fs.createReadStream(tempFilePath));
           formData.append('model', 'whisper-1');
 
           // Convert speech to text using OpenAI Whisper
@@ -149,15 +221,37 @@ app.post('/recording-status', async (req, res) => {
 
           console.log('Transcription response:', transcription.data);
           
-          // Save the transcription to a text file
-          const transcriptionPath = path.resolve(__dirname, `recordings/${recordingSid}.txt`);
-          fs.writeFileSync(transcriptionPath, transcription.data.text);
-          console.log('Transcription saved to:', transcriptionPath);
-          console.log('Transcription content:', transcription.data.text);
-        } catch (transcriptionError) {
-          console.error('Error transcribing recording:', transcriptionError.message);
-          console.error('Error details:', transcriptionError.response?.data || 'No response data');
-          console.error('Full error:', transcriptionError);
+          // Create transcription record
+          await prisma.transcription.create({
+            data: {
+              recordingId: recording.id,
+              text: transcription.data.text,
+              status: 'COMPLETED'
+            }
+          });
+
+          // Clean up temporary file
+          fs.unlinkSync(tempFilePath);
+          console.log('Temporary file cleaned up');
+          
+        } catch (error) {
+          console.error('Error processing recording:', error);
+          
+          // Only create failed transcription if we have a recording
+          if (recording) {
+            await prisma.transcription.create({
+              data: {
+                recordingId: recording.id,
+                text: '',
+                status: 'FAILED'
+              }
+            });
+          }
+          
+          // Clean up temporary file if it exists
+          if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+          }
         }
       });
 
@@ -228,13 +322,24 @@ app.get('/voice', (req, res) => {
 });
 
 // Add call status callback endpoint
-app.post('/call-status', (req, res) => {
+app.post('/call-status', async (req, res) => {
   try {
     console.log('Call status update:', req.body);
     const callStatus = req.body.CallStatus;
     const callSid = req.body.CallSid;
     const to = req.body.To;
     const from = req.body.From;
+    const duration = req.body.Duration;
+
+    // Update call record
+    await prisma.call.update({
+      where: { id: callSid },
+      data: {
+        status: callStatus.toUpperCase(),
+        endTime: callStatus === 'COMPLETED' ? new Date() : null,
+        duration: duration ? parseInt(duration) : null
+      }
+    });
 
     console.log(`Call ${callSid} status: ${callStatus}`);
     console.log(`From: ${from} To: ${to}`);
