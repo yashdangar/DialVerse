@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,82 +15,50 @@ export default function NumbersListPage() {
   const [statusFilter, setStatusFilter] = useState("all") // "all" | "active" | "inactive"
   const [sortField, setSortField] = useState("lastCalled")
   const [sortDirection, setSortDirection] = useState("desc") // "asc" | "desc"
+  const [numbers, setNumbers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  const numbers = [
-    {
-      id: 1,
-      number: "+1 (555) 123-4567",
-      label: "Sales Team",
-      lastCalled: "2023-06-15",
-      callCount: 42,
-      status: "active",
-    },
-    { id: 2, number: "+1 (555) 987-6543", label: "Support", lastCalled: "2023-06-14", callCount: 28, status: "active" },
-    {
-      id: 3,
-      number: "+1 (555) 456-7890",
-      label: "Marketing",
-      lastCalled: "2023-06-10",
-      callCount: 15,
-      status: "inactive",
-    },
-    {
-      id: 4,
-      number: "+1 (555) 234-5678",
-      label: "Customer Service",
-      lastCalled: "2023-06-13",
-      callCount: 37,
-      status: "active",
-    },
-    {
-      id: 5,
-      number: "+1 (555) 876-5432",
-      label: "Executive",
-      lastCalled: "2023-06-08",
-      callCount: 9,
-      status: "inactive",
-    },
-    {
-      id: 6,
-      number: "+1 (555) 345-6789",
-      label: "HR Department",
-      lastCalled: "2023-06-12",
-      callCount: 21,
-      status: "active",
-    },
-    {
-      id: 7,
-      number: "+1 (555) 654-3210",
-      label: "IT Support",
-      lastCalled: "2023-06-11",
-      callCount: 33,
-      status: "active",
-    },
-    {
-      id: 8,
-      number: "+1 (555) 789-0123",
-      label: "Accounting",
-      lastCalled: "2023-06-09",
-      callCount: 18,
-      status: "inactive",
-    },
-    {
-      id: 9,
-      number: "+1 (555) 321-0987",
-      label: "Reception",
-      lastCalled: "2023-06-14",
-      callCount: 45,
-      status: "active",
-    },
-    {
-      id: 10,
-      number: "+1 (555) 210-9876",
-      label: "Shipping",
-      lastCalled: "2023-06-07",
-      callCount: 12,
-      status: "inactive",
-    },
-  ]
+  const fetchNumbers = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/phone-numbers')
+      if (!response.ok) {
+        throw new Error('Failed to fetch phone numbers')
+      }
+      const data = await response.json()
+      setNumbers(data)
+    } catch (err) {
+      console.error('Error fetching phone numbers:', err)
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchNumbers()
+  }, [])
+
+  const handleStatusChange = async (id, newStatus) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/phone-numbers/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update status')
+      }
+
+      // Refresh the numbers list
+      fetchNumbers()
+    } catch (error) {
+      console.error('Error updating status:', error)
+    }
+  }
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -105,8 +73,7 @@ export default function NumbersListPage() {
     .filter(
       (entry) =>
         (statusFilter === "all" || entry.status === statusFilter) &&
-        (entry.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          entry.label.toLowerCase().includes(searchQuery.toLowerCase())),
+        entry.number.toLowerCase().includes(searchQuery.toLowerCase())
     )
     .sort((a, b) => {
       const fieldA = a[sortField]
@@ -120,6 +87,14 @@ export default function NumbersListPage() {
 
       return 0
     })
+
+  if (loading) {
+    return <div className="p-4">Loading phone numbers...</div>
+  }
+
+  if (error) {
+    return <div className="p-4 text-red-500">Error: {error}</div>
+  }
 
   return (
     <div className="container py-10">
@@ -136,7 +111,7 @@ export default function NumbersListPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search numbers or labels..."
+                placeholder="Search phone numbers..."
                 className="w-full pl-8"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -181,12 +156,6 @@ export default function NumbersListPage() {
                       {sortField === "number" && <ArrowUpDown className="h-4 w-4" />}
                     </div>
                   </TableHead>
-                  <TableHead className="cursor-pointer" onClick={() => handleSort("label")}>
-                    <div className="flex items-center gap-1">
-                      Label
-                      {sortField === "label" && <ArrowUpDown className="h-4 w-4" />}
-                    </div>
-                  </TableHead>
                   <TableHead className="cursor-pointer" onClick={() => handleSort("lastCalled")}>
                     <div className="flex items-center gap-1">
                       Last Called
@@ -211,7 +180,7 @@ export default function NumbersListPage() {
               <TableBody>
                 {filteredNumbers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
                       No phone numbers found matching your criteria
                     </TableCell>
                   </TableRow>
@@ -223,8 +192,7 @@ export default function NumbersListPage() {
                           {entry.number}
                         </Link>
                       </TableCell>
-                      <TableCell>{entry.label}</TableCell>
-                      <TableCell>{new Date(entry.lastCalled).toLocaleDateString()}</TableCell>
+                      <TableCell>{entry.lastCalled}</TableCell>
                       <TableCell className="text-right">{entry.callCount}</TableCell>
                       <TableCell>
                         <Badge variant={entry.status === "active" ? "default" : "secondary"}>
@@ -250,8 +218,9 @@ export default function NumbersListPage() {
                                 Call this Number
                               </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem>Edit Label</DropdownMenuItem>
-                            <DropdownMenuItem>{entry.status === "active" ? "Deactivate" : "Activate"}</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleStatusChange(entry.id, entry.status === "active" ? "inactive" : "active")}>
+                              {entry.status === "active" ? "Deactivate" : "Activate"}
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

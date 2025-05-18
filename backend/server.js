@@ -11,7 +11,7 @@ import { dirname } from 'path';
 import { ElevenLabsClient } from 'elevenlabs';
 import FormData from 'form-data';
 import { PrismaClient } from '@prisma/client';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
 
 // Initialize Prisma client
@@ -512,6 +512,271 @@ app.get('/test-transcribe', async (req, res) => {
       error: error.message,
       details: error.response?.data || 'No response data'
     });
+  }
+});
+
+// Add call history endpoint
+app.get('/api/call-history', async (req, res) => {
+  try {
+    const calls = await prisma.call.findMany({
+      include: {
+        phoneNumber: true,
+        recording: {
+          include: {
+            transcription: true
+          }
+        }
+      },
+      orderBy: {
+        startTime: 'desc'
+      },
+      take: 50 // Limit to last 50 calls
+    });
+
+    const formattedCalls = calls.map(call => {
+      // Calculate duration in minutes
+      const duration = call.endTime && call.startTime 
+        ? Math.round((call.endTime - call.startTime) / 1000 / 60)
+        : null;
+
+      // Format duration as MM:SS
+      const formatDuration = (minutes) => {
+        if (!minutes) return '0:00';
+        const mins = Math.floor(minutes);
+        const secs = Math.round((minutes - mins) * 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+      };
+
+      // Format date
+      const formatDate = (date) => {
+        const now = new Date();
+        const callDate = new Date(date);
+        const diffDays = Math.floor((now - callDate) / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) {
+          return `Today, ${callDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+        } else if (diffDays === 1) {
+          return `Yesterday, ${callDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+        } else {
+          return callDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit'
+          });
+        }
+      };
+
+      return {
+        id: call.id,
+        phoneNumberId: call.phoneNumberId,
+        number: call.phoneNumber.number,
+        date: formatDate(call.startTime),
+        duration: formatDuration(duration),
+        status: call.status,
+        hasRecording: !!call.recording,
+        hasTranscription: !!call.recording?.transcription,
+        transcription: call.recording?.transcription?.text || null
+      };
+    });
+
+    res.json(formattedCalls);
+  } catch (error) {
+    console.error('Error fetching call history:', error);
+    res.status(500).json({ error: 'Failed to fetch call history' });
+  }
+});
+
+// Add phone numbers endpoint
+app.get('/api/phone-numbers', async (req, res) => {
+  try {
+    const phoneNumbers = await prisma.phoneNumber.findMany({
+      include: {
+        _count: {
+          select: {
+            calls: true
+          }
+        },
+        calls: {
+          orderBy: {
+            startTime: 'desc'
+          },
+          take: 1,
+          select: {
+            startTime: true
+          }
+        }
+      },
+      orderBy: {
+        lastCalled: 'desc'
+      }
+    });
+
+    const formattedNumbers = phoneNumbers.map(number => {
+      // Get the most recent call
+      const lastCall = number.calls[0];
+      
+      // Format the last called date
+      const formatDate = (date) => {
+        if (!date) return 'Never';
+        return new Date(date).toISOString().split('T')[0];
+      };
+
+      return {
+        id: number.id,
+        number: number.number,
+        lastCalled: formatDate(lastCall?.startTime || number.lastCalled),
+        callCount: number._count.calls,
+        status: number.status.toLowerCase()
+      };
+    });
+
+    res.json(formattedNumbers);
+  } catch (error) {
+    console.error('Error fetching phone numbers:', error);
+    res.status(500).json({ error: 'Failed to fetch phone numbers' });
+  }
+});
+
+// Add endpoint to update phone number status
+app.patch('/api/phone-numbers/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['ACTIVE', 'INACTIVE'].includes(status?.toUpperCase())) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const updatedNumber = await prisma.phoneNumber.update({
+      where: { id },
+      data: { status: status.toUpperCase() }
+    });
+
+    res.json(updatedNumber);
+  } catch (error) {
+    console.error('Error updating phone number status:', error);
+    res.status(500).json({ error: 'Failed to update phone number status' });
+  }
+});
+
+// Add endpoint to get call details and recordings for a phone number
+app.get('/api/phone-numbers/:id/calls', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get phone number details
+    const phoneNumber = await prisma.phoneNumber.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            calls: true
+          }
+        },
+        calls: {
+          include: {
+            recording: {
+              include: {
+                transcription: true
+              }
+            }
+          },
+          orderBy: {
+            startTime: 'desc'
+          }
+        }
+      }
+    });
+
+    if (!phoneNumber) {
+      return res.status(404).json({ error: 'Phone number not found' });
+    }
+
+    // Format the phone number details
+    const numberDetails = {
+      id: phoneNumber.id,
+      number: phoneNumber.number,
+      callCount: phoneNumber._count.calls,
+      lastCalled: phoneNumber.lastCalled ? new Date(phoneNumber.lastCalled).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      }) : 'Never'
+    };
+
+    // Format the call recordings
+    const callRecordings = phoneNumber.calls.map(call => {
+      const startTime = new Date(call.startTime);
+      const duration = call.duration ? Math.floor(call.duration / 60) + ':' + 
+        (call.duration % 60).toString().padStart(2, '0') : '0:00';
+
+      return {
+        id: call.id,
+        recordingId: call.recording?.id,
+        date: startTime.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }),
+        time: startTime.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit'
+        }),
+        duration,
+        transcription: call.recording?.transcription?.text || null,
+        questions: call.recording?.transcription?.questions?.map(q => q.text) || [],
+        audioUrl: call.recording?.fileUrl || null
+      };
+    });
+
+    res.json({
+      numberDetails,
+      callRecordings
+    });
+  } catch (error) {
+    console.error('Error fetching call details:', error);
+    res.status(500).json({ error: 'Failed to fetch call details' });
+  }
+});
+
+// Add endpoint to proxy audio requests
+app.get('/api/recordings/:recordingId', async (req, res) => {
+  try {
+    const { recordingId } = req.params;
+    
+    // Get the recording from the database
+    const recording = await prisma.recording.findUnique({
+      where: { id: recordingId }
+    });
+
+    if (!recording) {
+      return res.status(404).json({ error: 'Recording not found' });
+    }
+
+    // Get the file from S3
+    const s3Key = recording.fileUrl.split('.com/')[1];
+    const command = new GetObjectCommand({
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: s3Key
+    });
+
+    const response = await s3Client.send(command);
+    
+    // Set appropriate headers
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Length', response.ContentLength);
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    // Stream the file to the client
+    if (response.Body instanceof Readable) {
+      response.Body.pipe(res);
+    } else {
+      throw new Error('Invalid response body type');
+    }
+  } catch (error) {
+    console.error('Error streaming recording:', error);
+    res.status(500).json({ error: 'Failed to stream recording' });
   }
 });
 

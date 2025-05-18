@@ -18,13 +18,9 @@ export default function DialerPage() {
   const [device, setDevice] = useState(null)
   const [currentCall, setCurrentCall] = useState(null)
   const [callSid, setCallSid] = useState(null)
-  const [callHistory, setCallHistory] = useState([
-    { id: 1, number: "+1 (555) 123-4567", date: "Today, 10:30 AM", duration: "5:23" },
-    { id: 2, number: "+1 (555) 987-6543", date: "Today, 9:15 AM", duration: "2:47" },
-    { id: 3, number: "+1 (555) 456-7890", date: "Yesterday, 3:20 PM", duration: "8:12" },
-    { id: 4, number: "+1 (555) 234-5678", date: "Yesterday, 11:05 AM", duration: "1:30" },
-    { id: 5, number: "+1 (555) 876-5432", date: "Jun 12, 2:45 PM", duration: "4:18" },
-  ])
+  const [callHistory, setCallHistory] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     const initDevice = async () => {
@@ -111,6 +107,26 @@ export default function DialerPage() {
         device.destroy()
       }
     }
+  }, [])
+
+  useEffect(() => {
+    const fetchCallHistory = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/call-history')
+        if (!response.ok) {
+          throw new Error('Failed to fetch call history')
+        }
+        const data = await response.json()
+        setCallHistory(data)
+      } catch (err) {
+        console.error('Error fetching call history:', err)
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCallHistory()
   }, [])
 
   const handleCall = async () => {
@@ -222,6 +238,14 @@ export default function DialerPage() {
     }
   }
 
+  if (loading) {
+    return <div className="p-4">Loading call history...</div>
+  }
+
+  if (error) {
+    return <div className="p-4 text-red-500">Error: {error}</div>
+  }
+
   return (
     <div className="container py-10">
       <h1 className="text-3xl font-bold mb-8">Web Dialer</h1>
@@ -318,7 +342,7 @@ export default function DialerPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{call.duration}</Badge>
-                      <Link href={`/calls/${call.id}`}>
+                      <Link href={`/calls/${call.phoneNumberId}`}>
                         <Button variant="ghost" size="icon">
                           <ArrowRight className="h-4 w-4" />
                         </Button>
