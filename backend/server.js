@@ -38,20 +38,51 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use('/api/call', callRoutes);
 
-// Handle voice calls at root path
-app.post('/', async (req, res) => {
+// Handle inbound calls
+app.post('/inbound', async (req, res) => {
   try {
-    console.log('Received voice webhook request at root path');
+    console.log('Received inbound call webhook');
     console.log('Request body:', req.body);
     console.log('Request headers:', req.headers);
 
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const twiml = new VoiceResponse();
 
-    // First say something to the caller
-    twiml.say('Please wait while we connect your call');
+    const phoneNumber = req.body.From;
+    if (!phoneNumber) {
+      throw new Error('Phone number is required');
+    }
 
-    // Create the dial verb with recording enabled
+    // Create or update phone number record
+    const phoneNumberRecord = await prisma.phoneNumber.upsert({
+      where: { number: phoneNumber },
+      update: { 
+        lastCalled: new Date(),
+        callCount: { increment: 1 }
+      },
+      create: {
+        number: phoneNumber,
+        status: 'ACTIVE',
+        lastCalled: new Date(),
+        callCount: 1
+      }
+    });
+
+    // Create call record
+    const call = await prisma.call.create({
+      data: {
+        id: req.body.CallSid,
+        status: 'INITIATED',
+        direction: 'INBOUND',
+        phoneNumberId: phoneNumberRecord.id
+      }
+    });
+
+    console.log('Created inbound call record:', call.id);
+    console.log('Phone number:', phoneNumber);
+
+    // Forward to the destination number
+    twiml.say('Please wait while we connect your call');
     const dial = twiml.dial({
       callerId: process.env.TWILIO_PHONE_NUMBER,
       timeout: 30,
@@ -62,40 +93,10 @@ app.post('/', async (req, res) => {
       hangupOnStar: true
     });
 
-    // Get the receiver number from the request body
-    const receiverNumber = req.body.To;
-    if (!receiverNumber) {
-      throw new Error('Receiver number is required');
-    }
-
-    // Create or update phone number record
-    const phoneNumber = await prisma.phoneNumber.upsert({
-      where: { number: receiverNumber },
-      update: { 
-        lastCalled: new Date(),
-        callCount: { increment: 1 }
-      },
-      create: {
-        number: receiverNumber,
-        status: 'ACTIVE',
-        lastCalled: new Date(),
-        callCount: 1
-      }
-    });
-
-    // Create call record with the Twilio Call SID
-    const call = await prisma.call.create({
-      data: {
-        id: req.body.CallSid, // Use Twilio's CallSid as our call ID
-        status: 'INITIATED',
-        direction: 'OUTBOUND',
-        phoneNumberId: phoneNumber.id
-      }
-    });
-
-    console.log('Created call record:', call.id);
-    console.log('Dialing number:', receiverNumber);
-    dial.number(receiverNumber, {
+    const forwardToNumber = process.env.FORWARD_TO_NUMBER || '+919313932890';
+    console.log('Forwarding inbound call to:', forwardToNumber);
+    
+    dial.number(forwardToNumber, {
       statusCallback: '/call-status',
       statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
       statusCallbackMethod: 'POST'
@@ -107,7 +108,7 @@ app.post('/', async (req, res) => {
     res.type('text/xml');
     res.send(response);
   } catch (error) {
-    console.error('Error in voice webhook:', error);
+    console.error('Error in inbound webhook:', error);
     const twiml = new twilio.twiml.VoiceResponse();
     twiml.say('An error occurred while processing your call.');
     res.type('text/xml');
@@ -123,6 +124,7 @@ app.post('/recording-status', async (req, res) => {
     const recordingSid = req.body.RecordingSid;
     const recordingStatus = req.body.RecordingStatus;
     const callSid = req.body.CallSid;
+    const recordingDuration = req.body.RecordingDuration;
     
     if (!recordingUrl) {
       return res.status(400).send('Recording URL is missing.');
@@ -186,17 +188,25 @@ app.post('/recording-status', async (req, res) => {
           // Generate S3 URL
           const s3Url = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
           
-          // Create recording record
+          // Create recording record with Twilio's duration
           recording = await prisma.recording.create({
             data: {
-              callId: callSid, // Use the verified call ID
+              callId: callSid,
               fileUrl: s3Url,
               fileSize: fs.statSync(tempFilePath).size,
-              duration: req.body.RecordingDuration ? parseInt(req.body.RecordingDuration) : null
+              duration: recordingDuration ? parseInt(recordingDuration) : null
             }
           });
           
           console.log('Recording record created:', recording.id);
+          
+          // Update call duration with Twilio's duration
+          await prisma.call.update({
+            where: { id: callSid },
+            data: {
+              duration: recordingDuration ? parseInt(recordingDuration) : null
+            }
+          });
           
           console.log('Starting transcription process...');
           
@@ -359,11 +369,15 @@ const VoiceGrant = AccessToken.VoiceGrant;
 
 app.get('/token', (req, res) => {
   const identity = req.query.identity;
+  const callType = req.query.callType; // 'inbound' or 'outbound'
+  
   if (!identity) {
     return res.status(400).json({ error: 'Identity is required' });
   }
+
   const voiceGrant = new VoiceGrant({
     outgoingApplicationSid: process.env.TWILIO_APP_SID,
+    incomingAllow: true
   });
 
   const token = new AccessToken(
@@ -377,10 +391,12 @@ app.get('/token', (req, res) => {
 
   res.send({
     token: token.toJwt(),
+    callType: callType || 'inbound' // Default to inbound if not specified
   });
 });
 
-app.post('/voice', (req, res) => {
+// Handle voice calls at root path (for inbound calls from Twilio)
+app.post('/', async (req, res) => {
   try {
     console.log('Received voice webhook request at root path');
     console.log('Request body:', req.body);
@@ -389,32 +405,84 @@ app.post('/voice', (req, res) => {
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const twiml = new VoiceResponse();
 
-    // First say something to the caller
-    twiml.say('Please wait while we connect your call');
+    // Check if this is a client call or a regular phone call
+    const isClientCall = req.body.From?.startsWith('client:');
+    const phoneNumber = isClientCall ? req.body.To : req.body.From;
 
-    // Create the dial verb
-    const dial = twiml.dial({
-      callerId: process.env.TWILIO_PHONE_NUMBER,
-      timeout: 30,
-      record: 'record-from-answer',
-      recordingStatusCallback: '/recording-status',
-      recordingStatusCallbackEvent: 'completed',
-      recordingStatusCallbackMethod: 'POST',
-      hangupOnStar: true
-    });
-
-    // Get the receiver number from the request body
-    const receiverNumber = req.body.To;
-    if (!receiverNumber) {
-      throw new Error('Receiver number is required');
+    if (!phoneNumber) {
+      throw new Error('Phone number is required');
     }
 
-    console.log('Dialing number:', receiverNumber);
-    dial.number(receiverNumber, {
-      statusCallback: '/call-status',
-      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-      statusCallbackMethod: 'POST'
+    // Create or update phone number record
+    const phoneNumberRecord = await prisma.phoneNumber.upsert({
+      where: { number: phoneNumber },
+      update: { 
+        lastCalled: new Date(),
+        callCount: { increment: 1 }
+      },
+      create: {
+        number: phoneNumber,
+        status: 'ACTIVE',
+        lastCalled: new Date(),
+        callCount: 1
+      }
     });
+
+    // Create call record
+    const call = await prisma.call.create({
+      data: {
+        id: req.body.CallSid,
+        status: 'INITIATED',
+        direction: isClientCall ? 'OUTBOUND' : 'INBOUND',
+        phoneNumberId: phoneNumberRecord.id
+      }
+    });
+
+    console.log('Created call record:', call.id);
+    console.log('Call direction:', isClientCall ? 'OUTBOUND' : 'INBOUND');
+    console.log('Phone number:', phoneNumber);
+
+    if (isClientCall) {
+      // For outbound calls (from client), dial the number directly
+      twiml.say('Please wait while we connect your call');
+      const dial = twiml.dial({
+        callerId: process.env.TWILIO_PHONE_NUMBER,
+        timeout: 30,
+        record: 'record-from-answer-dual',
+        recordingStatusCallback: '/recording-status',
+        recordingStatusCallbackEvent: 'completed',
+        recordingStatusCallbackMethod: 'POST',
+        hangupOnStar: true
+      });
+
+      console.log('Dialing outbound call to:', phoneNumber);
+      dial.number(phoneNumber, {
+        statusCallback: '/call-status',
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST'
+      });
+    } else {
+      // For inbound calls (from regular phone), forward to FORWARD_TO_NUMBER
+      twiml.say('Please wait while we connect your call');
+      const dial = twiml.dial({
+        callerId: process.env.TWILIO_PHONE_NUMBER,
+        timeout: 30,
+        record: 'record-from-answer-dual',
+        recordingStatusCallback: '/recording-status',
+        recordingStatusCallbackEvent: 'completed',
+        recordingStatusCallbackMethod: 'POST',
+        hangupOnStar: true
+      });
+
+      const forwardToNumber = process.env.FORWARD_TO_NUMBER || '+919313932890';
+      console.log('Forwarding inbound call to:', forwardToNumber);
+      
+      dial.number(forwardToNumber, {
+        statusCallback: '/call-status',
+        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+        statusCallbackMethod: 'POST'
+      });
+    }
 
     const response = twiml.toString();
     console.log('Generated TwiML:', response);
@@ -534,16 +602,11 @@ app.get('/api/call-history', async (req, res) => {
     });
 
     const formattedCalls = calls.map(call => {
-      // Calculate duration in minutes
-      const duration = call.endTime && call.startTime 
-        ? Math.round((call.endTime - call.startTime) / 1000 / 60)
-        : null;
-
       // Format duration as MM:SS
-      const formatDuration = (minutes) => {
-        if (!minutes) return '0:00';
-        const mins = Math.floor(minutes);
-        const secs = Math.round((minutes - mins) * 60);
+      const formatDuration = (seconds) => {
+        if (!seconds) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
         return `${mins}:${secs.toString().padStart(2, '0')}`;
       };
 
@@ -572,7 +635,7 @@ app.get('/api/call-history', async (req, res) => {
         phoneNumberId: call.phoneNumberId,
         number: call.phoneNumber.number,
         date: formatDate(call.startTime),
-        duration: formatDuration(duration),
+        duration: formatDuration(call.duration),
         status: call.status,
         hasRecording: !!call.recording,
         hasTranscription: !!call.recording?.transcription,
@@ -724,6 +787,7 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
           minute: '2-digit'
         }),
         duration,
+        direction: call.direction,
         transcription: call.recording?.transcription?.text || null,
         questions: call.recording?.transcription?.questions?.map(q => q.text) || [],
         audioUrl: call.recording?.fileUrl || null

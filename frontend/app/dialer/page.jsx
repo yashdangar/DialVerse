@@ -238,10 +238,6 @@ export default function DialerPage() {
     }
   }
 
-  if (loading) {
-    return <div className="p-4">Loading call history...</div>
-  }
-
   if (error) {
     return <div className="p-4 text-red-500">Error: {error}</div>
   }
@@ -330,27 +326,44 @@ export default function DialerPage() {
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-4">
-                {callHistory.map((call) => (
-                  <div key={call.id} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div>
-                      <p className="font-medium">{call.number}</p>
-                      <div className="flex items-center text-sm text-muted-foreground">
-                        <Clock className="mr-1 h-3 w-3" />
-                        <span>{call.date}</span>
+              {loading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3, 4].map((index) => (
+                    <div key={index} className="flex items-center justify-between p-3 rounded-lg border animate-pulse">
+                      <div className="space-y-2">
+                        <div className="h-4 bg-gray-200 rounded w-32"></div>
+                        <div className="h-3 bg-gray-200 rounded w-24"></div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 bg-gray-200 rounded w-16"></div>
+                        <div className="h-8 w-8 bg-gray-200 rounded"></div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">{call.duration}</Badge>
-                      <Link href={`/calls/${call.phoneNumberId}`}>
-                        <Button variant="ghost" size="icon">
-                          <ArrowRight className="h-4 w-4" />
-                        </Button>
-                      </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {callHistory.map((call) => (
+                    <div key={call.id} className="flex items-center justify-between p-3 rounded-lg border">
+                      <div>
+                        <p className="font-medium">{call.number}</p>
+                        <div className="flex items-center text-sm text-muted-foreground">
+                          <Clock className="mr-1 h-3 w-3" />
+                          <span>{call.date}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{call.duration}</Badge>
+                        <Link href={`/calls/${call.phoneNumberId}`}>
+                          <Button variant="ghost" size="icon">
+                            <ArrowRight className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </ScrollArea>
           </CardContent>
           <CardFooter>

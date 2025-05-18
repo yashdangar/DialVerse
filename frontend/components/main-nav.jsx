@@ -21,12 +21,12 @@ export function MainNav() {
             <span>Numbers</span>
           </div>
         </Link>
-        <Link href="/calls" className="transition-colors hover:text-foreground/80 text-foreground/60">
+        {/* <Link href="/calls" className="transition-colors hover:text-foreground/80 text-foreground/60">
           <div className="flex items-center gap-1">
             <FileText className="h-4 w-4" />
             <span>Call Details</span>
           </div>
-        </Link>
+        </Link> */}
       </nav>
     </div>
   )

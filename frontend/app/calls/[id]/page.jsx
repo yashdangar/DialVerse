@@ -30,7 +30,9 @@ export default function CallDetailsPage() {
         if (!response.ok) {
           throw new Error('Failed to fetch call details')
         }
+
         const data = await response.json()
+        console.log(data)
         setNumberDetails(data.numberDetails)
         setCallRecordings(data.callRecordings)
       } catch (err) {
@@ -122,26 +124,25 @@ export default function CallDetailsPage() {
           return true
         })
 
-  if (loading) {
-    return <div className="p-4">Loading call history...</div>
-  }
-
   if (error) {
     return <div className="p-4 text-red-500">Error: {error}</div>
-  }
-
-  if (!numberDetails) {
-    return <div className="p-4">No call history found</div>
   }
 
   return (
     <div className="container py-10">
       <div className="flex flex-col gap-2 mb-8">
         <h1 className="text-3xl font-bold">Call Details & Transcriptions</h1>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Phone className="h-4 w-4" />
-          <span>{numberDetails.number}</span>
-        </div>
+        {loading ? (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <div className="h-4 w-4 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Phone className="h-4 w-4" />
+            <span>{numberDetails?.number}</span>
+          </div>
+        )}
       </div>
 
       <Card className="shadow-md mb-8">
@@ -151,22 +152,29 @@ export default function CallDetailsPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="flex flex-col gap-1 p-4 border rounded-lg">
-              <div className="text-sm font-medium text-muted-foreground">Total Calls</div>
-              <div className="text-2xl font-bold">{numberDetails.callCount}</div>
-            </div>
-            <div className="flex flex-col gap-1 p-4 border rounded-lg">
-              <div className="text-sm font-medium text-muted-foreground">Last Called</div>
-              <div className="text-2xl font-bold">{numberDetails.lastCalled}</div>
-            </div>
-            {/* <div className="flex flex-col gap-1 p-4 border rounded-lg">
-              <div className="text-sm font-medium text-muted-foreground">Average Duration</div>
-              <div className="text-2xl font-bold">5:47</div>
-            </div>
-            <div className="flex flex-col gap-1 p-4 border rounded-lg">
-              <div className="text-sm font-medium text-muted-foreground">Call Success Rate</div>
-              <div className="text-2xl font-bold">87%</div>
-            </div> */}
+            {loading ? (
+              <>
+                <div className="flex flex-col gap-1 p-4 border rounded-lg">
+                  <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="h-8 w-16 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+                <div className="flex flex-col gap-1 p-4 border rounded-lg">
+                  <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="h-8 w-32 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex flex-col gap-1 p-4 border rounded-lg">
+                  <div className="text-sm font-medium text-muted-foreground">Total Calls</div>
+                  <div className="text-2xl font-bold">{numberDetails?.callCount}</div>
+                </div>
+                <div className="flex flex-col gap-1 p-4 border rounded-lg">
+                  <div className="text-sm font-medium text-muted-foreground">Last Called</div>
+                  <div className="text-2xl font-bold">{numberDetails?.lastCalled}</div>
+                </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -177,17 +185,39 @@ export default function CallDetailsPage() {
           <CardDescription>Listen to call recordings and view transcriptions</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* <Tabs defaultValue="all" className="mb-6" onValueChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="all">All Calls</TabsTrigger>
-              <TabsTrigger value="today">Today</TabsTrigger>
-              <TabsTrigger value="week">This Week</TabsTrigger>
-              <TabsTrigger value="month">This Month</TabsTrigger>
-            </TabsList>
-          </Tabs> */}
-
           <div className="space-y-6">
-            {filteredRecordings.length === 0 ? (
+            {loading ? (
+              // Skeleton loading state for recordings
+              Array.from({ length: 3 }).map((_, index) => (
+                <Card key={index} className="overflow-hidden">
+                  <CardHeader className="bg-muted/50 pb-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-24 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-6 w-24 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-6 w-24 bg-gray-200 rounded animate-pulse"></div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-20 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-8 w-20 bg-gray-200 rounded animate-pulse"></div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <div className="space-y-4">
+                      <div className="h-8 w-full bg-gray-200 rounded animate-pulse"></div>
+                      <div className="h-32 w-full bg-gray-200 rounded animate-pulse"></div>
+                      <div className="h-px w-full bg-gray-200"></div>
+                      <div className="space-y-4">
+                        <div className="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-24 w-full bg-gray-200 rounded animate-pulse"></div>
+                        <div className="h-10 w-32 bg-gray-200 rounded animate-pulse"></div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : filteredRecordings.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 No call recordings found for the selected time period
               </div>
@@ -208,6 +238,9 @@ export default function CallDetailsPage() {
                         <Badge variant="outline" className="gap-1">
                           <Headphones className="h-3 w-3" />
                           {recording.duration}
+                        </Badge>
+                        <Badge variant={recording.direction?.toUpperCase() === 'INBOUND' ? 'default' : 'secondary'} className="gap-1">
+                          {recording.direction?.toUpperCase() === 'INBOUND' ? 'Inbound' : 'Outbound'}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2">

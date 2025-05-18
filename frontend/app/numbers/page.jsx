@@ -88,10 +88,6 @@ export default function NumbersListPage() {
       return 0
     })
 
-  if (loading) {
-    return <div className="p-4">Loading phone numbers...</div>
-  }
-
   if (error) {
     return <div className="p-4 text-red-500">Error: {error}</div>
   }
@@ -178,7 +174,28 @@ export default function NumbersListPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredNumbers.length === 0 ? (
+                {loading ? (
+                  // Skeleton loading state
+                  Array.from({ length: 5 }).map((_, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="h-4 bg-gray-200 rounded w-16 animate-pulse ml-auto"></div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="h-6 bg-gray-200 rounded w-20 animate-pulse"></div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : filteredNumbers.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
                       No phone numbers found matching your criteria

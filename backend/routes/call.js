@@ -38,7 +38,7 @@ router.post('/', async (req, res) => {
     console.log('To:', callerPhoneNumber);
 
     const call = await client.calls.create({
-      url: `${process.env.NGROK_URL}/api/call/handle-call?receiverPhoneNumber=${receiverPhoneNumber}`,
+      url: `https://3aca-175-100-133-158.ngrok-free.app/api/call/handle-call?receiverPhoneNumber=${receiverPhoneNumber}`,
       to: callerPhoneNumber,
       from: process.env.TWILIO_PHONE_NUMBER,
     });
@@ -63,7 +63,7 @@ router.post('/handle-call', (req, res) => {
 
   const dial = twiml.dial({
     record: 'record-from-answer-dual',
-    recordingStatusCallback: `${process.env.NGROK_URL}/api/call/recording-callback`,
+    recordingStatusCallback: `https://917f-219-91-181-91.ngrok-free.app/api/call/recording-callback`,
     recordingStatusCallbackMethod: 'POST',
   });
 
@@ -151,55 +151,6 @@ async function downloadRecording(recordingUrl) {
     throw new Error('Download failed');
   }
 }
-
-// 📞 Handle incoming call to your Twilio number
-router.post('/incoming-call', (req, res) => {
-  const VoiceResponse = twilio.twiml.VoiceResponse;
-  const twiml = new VoiceResponse();
-
-  const gather = twiml.gather({
-    numDigits: 1,
-    action: `${process.env.NGROK_URL}/api/call/handle-input`,
-    method: 'POST',
-  });
-
-  gather.say('Press 1 to connect to our agent.');
-
-  // If no input, redirect back to prompt
-  twiml.redirect(`${process.env.NGROK_URL}/api/call/incoming-call`);
-
-  res.type('text/xml');
-  res.send(twiml.toString());
-});
-
-// 🎛️ Handle user input (DTMF)
-router.post('/handle-input', (req, res) => {
-  const VoiceResponse = twilio.twiml.VoiceResponse;
-  const twiml = new VoiceResponse();
-
-  const digits = req.body.Digits;
-  console.log('User pressed:', digits);
-
-  if (digits === '1') {
-    const dial = twiml.dial({
-      callerId: process.env.TWILIO_PHONE_NUMBER,
-      record: 'record-from-answer-dual',
-      recordingStatusCallback: `${process.env.NGROK_URL}/api/call/recording-callback`,
-      recordingStatusCallbackMethod: 'POST',
-    });
-    console.log('Dialing agent...');
-    dial.number('+918460050845'); // replace with your desired number
-
-  } else {
-    twiml.say('Invalid input. Goodbye.');
-    twiml.hangup();
-  }
-
-  res.type('text/xml');
-  res.send(twiml.toString());
-});
-
-
 
 
 export default router;
