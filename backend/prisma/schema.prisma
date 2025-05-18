@@ -1,15 +1,108 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model PhoneNumber {
+  id          String   @id @default(cuid())
+  number      String   @unique
+  status      Status   @default(ACTIVE)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastCalled  DateTime?
+  callCount   Int      @default(0)
+  calls       Call[]
+}
+
+model Call {
+  id             String       @id @default(cuid())
+  startTime      DateTime     @default(now())
+  endTime        DateTime?
+  duration       Int?         // Duration in mins
+  status         CallStatus   @default(INITIATED)
+  direction      Direction    @default(OUTBOUND)
+  phoneNumberId  String
+  phoneNumber    PhoneNumber  @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
+  recording      Recording?
+  notes          String?      @db.Text
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Recording {
+  id             String        @id @default(cuid())
+  callId         String        @unique
+  call           Call          @relation(fields: [callId], references: [id], onDelete: Cascade)
+  fileUrl        String
+  fileSize       Int?          // Size in bytes
+  duration       Int?          // Duration in minutes
+  transcription  Transcription?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Transcription {
+  id             String     @id @default(cuid())
+  recordingId    String     @unique
+  recording      Recording  @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  text           String     @db.Text
+  status         TranscriptionStatus @default(PENDING)
+  questions      Question[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model Question {
+  id              String       @id @default(cuid())
+  transcriptionId String
+  transcription   Transcription @relation(fields: [transcriptionId], references: [id], onDelete: Cascade)
+  text            String       @db.Text
+  order           Int          // For ordering questions
+  answers         Answer[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model Answer {
+  id          String    @id @default(cuid())
+  questionId  String
+  question    Question  @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text        String    @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+enum CallStatus {
+  INITIATED
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  MISSED
+  BUSY
+  NO_ANSWER
+}
+
+enum Direction {
+  INBOUND
+  OUTBOUND
+}
+
+enum TranscriptionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+} 
