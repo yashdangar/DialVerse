@@ -18,7 +18,7 @@ import OpenAI from 'openai';
 
 // Initialize Prisma client with correct configuration
 const prisma = new PrismaClient({
-  log: ['query', 'error', 'warn'],
+  log: ['error', 'warn'],
   datasources: {
     db: {
       url: process.env.DATABASE_URL
@@ -27,11 +27,6 @@ const prisma = new PrismaClient({
 });
 
 // Handle Prisma connection errors
-prisma.$on('query', (e) => {
-  console.log('Query:', e.query);
-  console.log('Duration:', e.duration, 'ms');
-});
-
 prisma.$on('error', (e) => {
   console.error('Prisma Error:', e);
 });
@@ -762,7 +757,7 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get phone number details
+    // Get phone number details with only the current call
     const phoneNumber = await prisma.phoneNumber.findUnique({
       where: { id },
       include: {
@@ -777,14 +772,9 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
               include: {
                 transcription: {
                   include: {
-                    questions: {
+                    answers: {
                       include: {
-                        answers: {
-                          orderBy: {
-                            createdAt: 'desc'
-                          },
-                          take: 1
-                        }
+                        question: true
                       }
                     }
                   }
@@ -822,13 +812,13 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
         (call.duration % 60).toString().padStart(2, '0') : '0:00';
 
       // Get questions and answers from the transcription
-      const questions = call.recording?.transcription?.questions.map(q => ({
-        id: q.id,
-        text: q.text,
-        answer: q.answers[0]?.text || null
+      const questions = call.recording?.transcription?.answers.map(a => ({
+        id: a.question.id,
+        text: a.question.text,
+        answer: a.text
       })) || [];
 
-      console.log(`Call ${call.id} has ${questions.length} questions`);
+      console.log(`Call ${call.id} has ${questions.length} questions with answers`);
 
       return {
         id: call.id,
@@ -849,8 +839,6 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
         audioUrl: call.recording?.fileUrl || null
       };
     });
-
-    console.log('Sending response with questions:', callRecordings[0]?.questions);
 
     res.json({
       numberDetails,
@@ -912,9 +900,6 @@ async function analyzeTranscription(transcriptionId, transcriptionText) {
     // Get all questions
     console.log('Fetching questions from database...');
     const questions = await prisma.question.findMany({
-      where: {
-        transcriptionId: null // Only get questions not linked to any transcription
-      },
       orderBy: {
         order: 'asc'
       }
@@ -956,13 +941,6 @@ async function analyzeTranscription(transcriptionId, transcriptionText) {
         }
       });
       console.log('Answer record created successfully:', answerRecord.id);
-
-      // Link question to transcription
-      await prisma.question.update({
-        where: { id: question.id },
-        data: { transcriptionId: transcriptionId }
-      });
-      console.log('Question linked to transcription');
     }
 
     // Update transcription status
