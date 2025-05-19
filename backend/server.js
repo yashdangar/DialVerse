@@ -503,7 +503,7 @@ app.post('/', async (req, res) => {
         hangupOnStar: true
       });
 
-      const forwardToNumber = process.env.FORWARD_TO_NUMBER || '+919313932890';
+      const forwardToNumber = process.env.FORWARD_TO_NUMBER;
       console.log('Forwarding inbound call to:', forwardToNumber);
       
       dial.number(forwardToNumber, {
@@ -817,8 +817,6 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
         text: a.question.text,
         answer: a.text
       })) || [];
-
-      console.log(`Call ${call.id} has ${questions.length} questions with answers`);
 
       return {
         id: call.id,
