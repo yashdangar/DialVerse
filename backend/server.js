@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import callRoutes from './routes/call.js';
+import questionsRoutes from './routes/questions.js';
 import twilio from 'twilio';
 import axios from 'axios';
 import path from 'path';
@@ -13,9 +14,27 @@ import FormData from 'form-data';
 import { PrismaClient } from '@prisma/client';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { Readable } from 'stream';
+import OpenAI from 'openai';
 
-// Initialize Prisma client
-const prisma = new PrismaClient();
+// Initialize Prisma client with correct configuration
+const prisma = new PrismaClient({
+  log: ['query', 'error', 'warn'],
+  datasources: {
+    db: {
+      url: process.env.DATABASE_URL
+    }
+  }
+});
+
+// Handle Prisma connection errors
+prisma.$on('query', (e) => {
+  console.log('Query:', e.query);
+  console.log('Duration:', e.duration, 'ms');
+});
+
+prisma.$on('error', (e) => {
+  console.error('Prisma Error:', e);
+});
 
 // Initialize S3 client
 const s3Client = new S3Client({
@@ -37,6 +56,12 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use('/api/call', callRoutes);
+app.use('/api/questions', questionsRoutes);
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 // Handle inbound calls
 app.post('/inbound', async (req, res) => {
@@ -232,13 +257,22 @@ app.post('/recording-status', async (req, res) => {
           console.log('Transcription response:', transcription.data);
           
           // Create transcription record
-          await prisma.transcription.create({
+          const transcriptionRecord = await prisma.transcription.create({
             data: {
               recordingId: recording.id,
               text: transcription.data.text,
-              status: 'COMPLETED'
+              status: 'PENDING' // Start with PENDING status
             }
           });
+
+          console.log('Created transcription record:', transcriptionRecord.id);
+          console.log('Starting automatic analysis of transcription...');
+
+          // Start analysis in the background
+          analyzeTranscription(transcriptionRecord.id, transcription.data.text)
+            .catch(error => {
+              console.error('Background analysis failed:', error);
+            });
 
           // Clean up temporary file
           fs.unlinkSync(tempFilePath);
@@ -741,7 +775,20 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
           include: {
             recording: {
               include: {
-                transcription: true
+                transcription: {
+                  include: {
+                    questions: {
+                      include: {
+                        answers: {
+                          orderBy: {
+                            createdAt: 'desc'
+                          },
+                          take: 1
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           },
@@ -774,6 +821,15 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
       const duration = call.duration ? Math.floor(call.duration / 60) + ':' + 
         (call.duration % 60).toString().padStart(2, '0') : '0:00';
 
+      // Get questions and answers from the transcription
+      const questions = call.recording?.transcription?.questions.map(q => ({
+        id: q.id,
+        text: q.text,
+        answer: q.answers[0]?.text || null
+      })) || [];
+
+      console.log(`Call ${call.id} has ${questions.length} questions`);
+
       return {
         id: call.id,
         recordingId: call.recording?.id,
@@ -789,10 +845,12 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
         duration,
         direction: call.direction,
         transcription: call.recording?.transcription?.text || null,
-        questions: call.recording?.transcription?.questions?.map(q => q.text) || [],
+        questions: questions,
         audioUrl: call.recording?.fileUrl || null
       };
     });
+
+    console.log('Sending response with questions:', callRecordings[0]?.questions);
 
     res.json({
       numberDetails,
@@ -841,6 +899,128 @@ app.get('/api/recordings/:recordingId', async (req, res) => {
   } catch (error) {
     console.error('Error streaming recording:', error);
     res.status(500).json({ error: 'Failed to stream recording' });
+  }
+});
+
+// Function to analyze transcription against questions
+async function analyzeTranscription(transcriptionId, transcriptionText) {
+  try {
+    console.log('='.repeat(50));
+    console.log(`Starting analysis for transcription ${transcriptionId}`);
+    console.log('='.repeat(50));
+    
+    // Get all questions
+    console.log('Fetching questions from database...');
+    const questions = await prisma.question.findMany({
+      where: {
+        transcriptionId: null // Only get questions not linked to any transcription
+      },
+      orderBy: {
+        order: 'asc'
+      }
+    });
+    
+    if (questions.length === 0) {
+      console.log('No questions found in database. Please add questions first.');
+      return;
+    }
+    
+    console.log(`Found ${questions.length} questions to analyze`);
+    console.log('Questions:', questions.map(q => q.text).join('\n'));
+
+    // For each question, use OpenAI to analyze the transcription
+    for (const question of questions) {
+      console.log('\n' + '-'.repeat(50));
+      console.log(`Analyzing question: "${question.text}"`);
+      
+      const prompt = `Based on the following call transcription, answer this question: "${question.text}"\n\nTranscription: ${transcriptionText}\n\nProvide a clear and concise answer based only on the information in the transcription. If the transcription doesn't contain enough information to answer the question, respond with "No clear answer available from the transcription."`;
+      
+      console.log('Sending request to OpenAI...');
+      const completion = await openai.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: "gpt-3.5-turbo",
+        temperature: 0.3,
+        max_tokens: 150
+      });
+
+      const answer = completion.choices[0].message.content;
+      console.log('Received answer from OpenAI:', answer);
+
+      // Create answer record
+      console.log('Creating answer record in database...');
+      const answerRecord = await prisma.answer.create({
+        data: {
+          questionId: question.id,
+          text: answer,
+          transcriptionId: transcriptionId
+        }
+      });
+      console.log('Answer record created successfully:', answerRecord.id);
+
+      // Link question to transcription
+      await prisma.question.update({
+        where: { id: question.id },
+        data: { transcriptionId: transcriptionId }
+      });
+      console.log('Question linked to transcription');
+    }
+
+    // Update transcription status
+    console.log('\nUpdating transcription status to COMPLETED');
+    await prisma.transcription.update({
+      where: { id: transcriptionId },
+      data: { status: 'COMPLETED' }
+    });
+    console.log('Analysis completed successfully');
+    console.log('='.repeat(50));
+
+  } catch (error) {
+    console.error('\nError analyzing transcription:', error);
+    console.error('Error details:', error.message);
+    if (error.response) {
+      console.error('OpenAI API response:', error.response.data);
+    }
+    
+    // Update transcription status to failed
+    await prisma.transcription.update({
+      where: { id: transcriptionId },
+      data: { status: 'FAILED' }
+    });
+    throw error;
+  }
+}
+
+// Update the transcription processing endpoint
+app.post('/process-transcription', async (req, res) => {
+  try {
+    const { transcriptionId } = req.body;
+    console.log(`Received request to process transcription ${transcriptionId}`);
+    
+    const transcription = await prisma.transcription.findUnique({
+      where: { id: transcriptionId },
+      include: {
+        questions: true
+      }
+    });
+
+    if (!transcription) {
+      console.log(`Transcription ${transcriptionId} not found`);
+      return res.status(404).json({ error: 'Transcription not found' });
+    }
+
+    console.log(`Found transcription with text length: ${transcription.text.length}`);
+    console.log(`Existing questions: ${transcription.questions.length}`);
+    
+    // Start analysis in the background
+    analyzeTranscription(transcriptionId, transcription.text)
+      .catch(error => {
+        console.error('Background analysis failed:', error);
+      });
+
+    res.json({ message: 'Transcription analysis started' });
+  } catch (error) {
+    console.error('Error processing transcription:', error);
+    res.status(500).json({ error: 'Failed to process transcription' });
   }
 });
 

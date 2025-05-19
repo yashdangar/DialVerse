@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Phone, List, FileText } from "lucide-react"
+import { Phone, List, FileText, HelpCircle } from "lucide-react"
 
 export function MainNav() {
   return (
@@ -21,12 +21,12 @@ export function MainNav() {
             <span>Numbers</span>
           </div>
         </Link>
-        {/* <Link href="/calls" className="transition-colors hover:text-foreground/80 text-foreground/60">
+        <Link href="/questions" className="transition-colors hover:text-foreground/80 text-foreground/60">
           <div className="flex items-center gap-1">
-            <FileText className="h-4 w-4" />
-            <span>Call Details</span>
+            <HelpCircle className="h-4 w-4" />
+            <span>Questions</span>
           </div>
-        </Link> */}
+        </Link>
       </nav>
     </div>
   )
