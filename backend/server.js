@@ -666,22 +666,36 @@ app.get('/api/call-history', async (req, res) => {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
       };
 
-      // Format date
+      // Format date with IST timezone
       const formatDate = (date) => {
         const now = new Date();
         const callDate = new Date(date);
-        const diffDays = Math.floor((now - callDate) / (1000 * 60 * 60 * 24));
+        
+        // Convert to IST
+        const istDate = new Date(callDate.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        const nowIST = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        
+        const diffDays = Math.floor((nowIST - istDate) / (1000 * 60 * 60 * 24));
 
         if (diffDays === 0) {
-          return `Today, ${callDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+          return `Today, ${istDate.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            timeZone: 'Asia/Kolkata'
+          })}`;
         } else if (diffDays === 1) {
-          return `Yesterday, ${callDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+          return `Yesterday, ${istDate.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            timeZone: 'Asia/Kolkata'
+          })}`;
         } else {
-          return callDate.toLocaleDateString('en-US', {
+          return istDate.toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
             hour: 'numeric',
-            minute: '2-digit'
+            minute: '2-digit',
+            timeZone: 'Asia/Kolkata'
           });
         }
       };
@@ -735,10 +749,11 @@ app.get('/api/phone-numbers', async (req, res) => {
       // Get the most recent call
       const lastCall = number.calls[0];
 
-      // Format the last called date
+      // Format the last called date with IST timezone
       const formatDate = (date) => {
         if (!date) return 'Never';
-        return new Date(date).toISOString().split('T')[0];
+        const istDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        return istDate.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
       };
 
       return {
@@ -820,21 +835,22 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
       return res.status(404).json({ error: 'Phone number not found' });
     }
 
-    // Format the phone number details
+    // Format the phone number details with IST timezone
     const numberDetails = {
       id: phoneNumber.id,
       number: phoneNumber.number,
       callCount: phoneNumber._count.calls,
-      lastCalled: phoneNumber.lastCalled ? new Date(phoneNumber.lastCalled).toLocaleDateString('en-US', {
+      lastCalled: phoneNumber.lastCalled ? new Date(phoneNumber.lastCalled.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
-        day: 'numeric'
+        day: 'numeric',
+        timeZone: 'Asia/Kolkata'
       }) : 'Never'
     };
 
-    // Format the call recordings
+    // Format the call recordings with IST timezone
     const callRecordings = phoneNumber.calls.map(call => {
-      const startTime = new Date(call.startTime);
+      const startTime = new Date(call.startTime.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
       const duration = call.duration ? Math.floor(call.duration / 60) + ':' +
         (call.duration % 60).toString().padStart(2, '0') : '0:00';
 
@@ -851,11 +867,13 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
         date: startTime.toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'long',
-          day: 'numeric'
+          day: 'numeric',
+          timeZone: 'Asia/Kolkata'
         }),
         time: startTime.toLocaleTimeString('en-US', {
           hour: 'numeric',
-          minute: '2-digit'
+          minute: '2-digit',
+          timeZone: 'Asia/Kolkata'
         }),
         duration,
         direction: call.direction,
