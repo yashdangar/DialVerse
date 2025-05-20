@@ -53,14 +53,20 @@ const app = express();
 app.use(cors({
   origin: ['https://call-managment.vercel.app', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Range'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range', 'Content-Length', 'Accept-Ranges'],
   credentials: true,
   maxAge: 86400 // 24 hours
 }));
 
+// Handle OPTIONS requests
+app.options('*', cors());
+
 // Security middleware
-app.use(helmet()); // Add security headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: { policy: "unsafe-none" }
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -895,16 +901,40 @@ app.get('/api/recordings/:recordingId', async (req, res) => {
 
     const response = await s3Client.send(command);
 
-    // Set appropriate headers
+    // Set appropriate headers for CORS and streaming
+    res.setHeader('Access-Control-Allow-Origin', 'https://call-managment.vercel.app');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Length', response.ContentLength);
     res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
 
-    // Stream the file to the client
-    if (response.Body instanceof Readable) {
-      response.Body.pipe(res);
+    // Handle range requests for streaming
+    const range = req.headers.range;
+    if (range) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : response.ContentLength - 1;
+      const chunksize = (end - start) + 1;
+
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${response.ContentLength}`);
+      res.setHeader('Content-Length', chunksize);
+      res.status(206);
+
+      if (response.Body instanceof Readable) {
+        response.Body.pipe(res);
+      } else {
+        throw new Error('Invalid response body type');
+      }
     } else {
-      throw new Error('Invalid response body type');
+      // If no range is specified, send the entire file
+      if (response.Body instanceof Readable) {
+        response.Body.pipe(res);
+      } else {
+        throw new Error('Invalid response body type');
+      }
     }
   } catch (error) {
     console.error('Error streaming recording:', error);
