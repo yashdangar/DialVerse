@@ -65,7 +65,9 @@ app.use('/api/questions', questionsRoutes);
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
-
+app.get("/health", (req, res) => {
+  res.status(200).json({ message: "Server is running" });
+});
 // Handle inbound calls
 app.post('/inbound', async (req, res) => {
   try {
