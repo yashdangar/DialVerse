@@ -49,6 +49,9 @@ dotenv.config();
 
 const app = express();
 
+// Trust proxy for Vercel deployment
+app.set('trust proxy', 1);
+
 // Configure CORS with specific options
 app.use(cors({
   origin: ['https://call-managment.vercel.app', 'http://localhost:3000'],
