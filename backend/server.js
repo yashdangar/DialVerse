@@ -51,7 +51,7 @@ const app = express();
 
 // Configure CORS with specific options
 app.use(cors({
-  origin: process.env.FRONTEND_URL || ['http://localhost:3000', 'https://your-production-domain.com'],
+  origin: ['https://call-managment.vercel.app', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   exposedHeaders: ['Content-Range', 'X-Content-Range'],
