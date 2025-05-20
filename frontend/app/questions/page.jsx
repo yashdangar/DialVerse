@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Trash2, ArrowUp, ArrowDown } from "lucide-react"
+import { API_URL } from "@/config"
 
 export default function QuestionsPage() {
   const [questions, setQuestions] = useState([])
@@ -16,7 +17,7 @@ export default function QuestionsPage() {
 
   const fetchQuestions = async () => {
     try {
-      const response = await fetch("http://localhost:5000/api/questions")
+      const response = await fetch(`${API_URL}/api/questions`)
       const data = await response.json()
       setQuestions(data)
     } catch (error) {
@@ -28,7 +29,7 @@ export default function QuestionsPage() {
     if (!newQuestion.trim()) return
 
     try {
-      const response = await fetch("http://localhost:5000/api/questions", {
+      const response = await fetch(`${API_URL}/api/questions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -47,7 +48,7 @@ export default function QuestionsPage() {
 
   const deleteQuestion = async (id) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/questions/${id}`, {
+      const response = await fetch(`${API_URL}/api/questions/${id}`, {
         method: "DELETE",
       })
 
@@ -61,7 +62,7 @@ export default function QuestionsPage() {
 
   const moveQuestion = async (id, direction) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/questions/${id}/move`, {
+      const response = await fetch(`${API_URL}/api/questions/${id}/move`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

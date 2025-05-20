@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Search, Phone, Filter, MoreVertical, ArrowUpDown } from "lucide-react"
+import { API_URL } from "@/config"
 
 export default function NumbersListPage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -21,7 +22,7 @@ export default function NumbersListPage() {
 
   const fetchNumbers = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/phone-numbers')
+      const response = await fetch(`${API_URL}/api/phone-numbers`)
       if (!response.ok) {
         throw new Error('Failed to fetch phone numbers')
       }
@@ -41,7 +42,7 @@ export default function NumbersListPage() {
 
   const handleStatusChange = async (id, newStatus) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/phone-numbers/${id}/status`, {
+      const response = await fetch(`${API_URL}/api/phone-numbers/${id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

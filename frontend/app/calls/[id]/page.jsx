@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Calendar, Clock, Download, FileText, Headphones, Pause, Play, Phone, User } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { API_URL } from "@/config"
 
 export default function CallDetailsPage() {
   const params = useParams()
@@ -26,7 +27,7 @@ export default function CallDetailsPage() {
   useEffect(() => {
     const fetchCallDetails = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/phone-numbers/${id}/calls`)
+        const response = await fetch(`${API_URL}/api/phone-numbers/${id}/calls`)
         if (!response.ok) {
           throw new Error('Failed to fetch call details')
         }
@@ -78,7 +79,7 @@ export default function CallDetailsPage() {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/recordings/${recordingId}`)
+      const response = await fetch(`${API_URL}/api/recordings/${recordingId}`)
       if (!response.ok) {
         throw new Error('Failed to download recording')
       }
@@ -252,7 +253,7 @@ export default function CallDetailsPage() {
                       <div className="mb-4">
                         <audio
                           ref={el => audioRefs.current[recording.id] = el}
-                          src={`http://localhost:5000/api/recordings/${recording.recordingId}`}
+                          src={`${API_URL}/api/recordings/${recording.recordingId}`}
                           onEnded={() => handleAudioEnded(recording.id)}
                           className="w-full"
                         />

@@ -76,7 +76,7 @@ app.post('/inbound', async (req, res) => {
     // Create or update phone number record
     const phoneNumberRecord = await prisma.phoneNumber.upsert({
       where: { number: phoneNumber },
-      update: { 
+      update: {
         lastCalled: new Date(),
         callCount: { increment: 1 }
       },
@@ -115,7 +115,7 @@ app.post('/inbound', async (req, res) => {
 
     const forwardToNumber = process.env.FORWARD_TO_NUMBER || '+919313932890';
     console.log('Forwarding inbound call to:', forwardToNumber);
-    
+
     dial.number(forwardToNumber, {
       statusCallback: '/call-status',
       statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
@@ -145,7 +145,7 @@ app.post('/recording-status', async (req, res) => {
     const recordingStatus = req.body.RecordingStatus;
     const callSid = req.body.CallSid;
     const recordingDuration = req.body.RecordingDuration;
-    
+
     if (!recordingUrl) {
       return res.status(400).send('Recording URL is missing.');
     }
@@ -185,13 +185,13 @@ app.post('/recording-status', async (req, res) => {
 
       writer.on('finish', async () => {
         console.log('Recording downloaded to temp file:', tempFilePath);
-        
+
         let recording;
         try {
           // Upload to S3
           const fileStream = fs.createReadStream(tempFilePath);
           const s3Key = `recordings/${recordingSid}.mp3`;
-          
+
           if (!process.env.AWS_S3_BUCKET) {
             throw new Error('AWS_S3_BUCKET environment variable is not set');
           }
@@ -204,10 +204,10 @@ app.post('/recording-status', async (req, res) => {
           };
 
           await s3Client.send(new PutObjectCommand(uploadParams));
-          
+
           // Generate S3 URL
           const s3Url = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`;
-          
+
           // Create recording record with Twilio's duration
           recording = await prisma.recording.create({
             data: {
@@ -217,9 +217,9 @@ app.post('/recording-status', async (req, res) => {
               duration: recordingDuration ? parseInt(recordingDuration) : null
             }
           });
-          
+
           console.log('Recording record created:', recording.id);
-          
+
           // Update call duration with Twilio's duration
           await prisma.call.update({
             where: { id: callSid },
@@ -227,9 +227,9 @@ app.post('/recording-status', async (req, res) => {
               duration: recordingDuration ? parseInt(recordingDuration) : null
             }
           });
-          
+
           console.log('Starting transcription process...');
-          
+
           // Create form data for OpenAI
           const formData = new FormData();
           formData.append('file', fs.createReadStream(tempFilePath));
@@ -250,7 +250,7 @@ app.post('/recording-status', async (req, res) => {
           );
 
           console.log('Transcription response:', transcription.data);
-          
+
           // Create transcription record
           const transcriptionRecord = await prisma.transcription.create({
             data: {
@@ -272,10 +272,10 @@ app.post('/recording-status', async (req, res) => {
           // Clean up temporary file
           fs.unlinkSync(tempFilePath);
           console.log('Temporary file cleaned up');
-          
+
         } catch (error) {
           console.error('Error processing recording:', error);
-          
+
           // Only create failed transcription if we have a recording
           if (recording) {
             await prisma.transcription.create({
@@ -286,7 +286,7 @@ app.post('/recording-status', async (req, res) => {
               }
             });
           }
-          
+
           // Clean up temporary file if it exists
           if (fs.existsSync(tempFilePath)) {
             fs.unlinkSync(tempFilePath);
@@ -315,10 +315,10 @@ app.post('/recording-status', async (req, res) => {
 app.post('/hangup', async (req, res) => {
   try {
     console.log('Hangup request received');
-    
+
     // Get the call SID from the request
     const callSid = req.body.CallSid;
-    
+
     if (callSid) {
       // Create Twilio client
       const client = twilio(
@@ -329,7 +329,7 @@ app.post('/hangup', async (req, res) => {
       // Update the call to end it
       await client.calls(callSid)
         .update({ status: 'completed' });
-      
+
       console.log(`Call ${callSid} has been terminated`);
     }
 
@@ -337,7 +337,7 @@ app.post('/hangup', async (req, res) => {
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const twiml = new VoiceResponse();
     twiml.hangup();
-    
+
     res.type('text/xml');
     res.send(twiml.toString());
   } catch (error) {
@@ -399,7 +399,7 @@ const VoiceGrant = AccessToken.VoiceGrant;
 app.get('/token', (req, res) => {
   const identity = req.query.identity;
   const callType = req.query.callType; // 'inbound' or 'outbound'
-  
+
   if (!identity) {
     return res.status(400).json({ error: 'Identity is required' });
   }
@@ -413,7 +413,7 @@ app.get('/token', (req, res) => {
     process.env.TWILIO_ACCOUNT_SID,
     process.env.TWILIO_API_KEY,
     process.env.TWILIO_API_SECRET,
-    { identity } 
+    { identity }
   );
   token.addGrant(voiceGrant);
   token.identity = 'user-' + Math.floor(Math.random() * 10000);
@@ -445,7 +445,7 @@ app.post('/', async (req, res) => {
     // Create or update phone number record
     const phoneNumberRecord = await prisma.phoneNumber.upsert({
       where: { number: phoneNumber },
-      update: { 
+      update: {
         lastCalled: new Date(),
         callCount: { increment: 1 }
       },
@@ -505,7 +505,7 @@ app.post('/', async (req, res) => {
 
       const forwardToNumber = process.env.FORWARD_TO_NUMBER;
       console.log('Forwarding inbound call to:', forwardToNumber);
-      
+
       dial.number(forwardToNumber, {
         statusCallback: '/call-status',
         statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
@@ -561,7 +561,7 @@ app.get('/test-transcribe', async (req, res) => {
     const recordingsDir = path.resolve(__dirname, 'recordings');
     const files = fs.readdirSync(recordingsDir);
     const mp3File = files.find(file => file.endsWith('.mp3'));
-    
+
     if (!mp3File) {
       return res.status(404).json({ error: 'No MP3 files found in recordings directory' });
     }
@@ -589,12 +589,12 @@ app.get('/test-transcribe', async (req, res) => {
     );
 
     console.log('Transcription response:', transcription.data);
-    
+
     // Save the transcription to a text file
     const transcriptionPath = path.join(recordingsDir, mp3File.replace('.mp3', '.txt'));
     fs.writeFileSync(transcriptionPath, transcription.data.text);
     console.log('Transcription saved to:', transcriptionPath);
-    
+
     res.json({
       success: true,
       message: 'Transcription completed',
@@ -650,8 +650,8 @@ app.get('/api/call-history', async (req, res) => {
         } else if (diffDays === 1) {
           return `Yesterday, ${callDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
         } else {
-          return callDate.toLocaleDateString('en-US', { 
-            month: 'short', 
+          return callDate.toLocaleDateString('en-US', {
+            month: 'short',
             day: 'numeric',
             hour: 'numeric',
             minute: '2-digit'
@@ -707,7 +707,7 @@ app.get('/api/phone-numbers', async (req, res) => {
     const formattedNumbers = phoneNumbers.map(number => {
       // Get the most recent call
       const lastCall = number.calls[0];
-      
+
       // Format the last called date
       const formatDate = (date) => {
         if (!date) return 'Never';
@@ -808,7 +808,7 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
     // Format the call recordings
     const callRecordings = phoneNumber.calls.map(call => {
       const startTime = new Date(call.startTime);
-      const duration = call.duration ? Math.floor(call.duration / 60) + ':' + 
+      const duration = call.duration ? Math.floor(call.duration / 60) + ':' +
         (call.duration % 60).toString().padStart(2, '0') : '0:00';
 
       // Get questions and answers from the transcription
@@ -852,7 +852,7 @@ app.get('/api/phone-numbers/:id/calls', async (req, res) => {
 app.get('/api/recordings/:recordingId', async (req, res) => {
   try {
     const { recordingId } = req.params;
-    
+
     // Get the recording from the database
     const recording = await prisma.recording.findUnique({
       where: { id: recordingId }
@@ -870,7 +870,7 @@ app.get('/api/recordings/:recordingId', async (req, res) => {
     });
 
     const response = await s3Client.send(command);
-    
+
     // Set appropriate headers
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Length', response.ContentLength);
@@ -894,7 +894,7 @@ async function analyzeTranscription(transcriptionId, transcriptionText) {
     console.log('='.repeat(50));
     console.log(`Starting analysis for transcription ${transcriptionId}`);
     console.log('='.repeat(50));
-    
+
     // Get all questions
     console.log('Fetching questions from database...');
     const questions = await prisma.question.findMany({
@@ -902,12 +902,12 @@ async function analyzeTranscription(transcriptionId, transcriptionText) {
         order: 'asc'
       }
     });
-    
+
     if (questions.length === 0) {
       console.log('No questions found in database. Please add questions first.');
       return;
     }
-    
+
     console.log(`Found ${questions.length} questions to analyze`);
     console.log('Questions:', questions.map(q => q.text).join('\n'));
 
@@ -915,9 +915,14 @@ async function analyzeTranscription(transcriptionId, transcriptionText) {
     for (const question of questions) {
       console.log('\n' + '-'.repeat(50));
       console.log(`Analyzing question: "${question.text}"`);
-      
-      const prompt = `Based on the following call transcription, answer this question: "${question.text}"\n\nTranscription: ${transcriptionText}\n\nProvide a clear and concise answer based only on the information in the transcription. If the transcription doesn't contain enough information to answer the question, respond with "No clear answer available from the transcription."`;
-      
+
+      const prompt = `You are given a call transcription between two people. Based on this transcription, answer the following question: "${question.text}"
+
+      Transcription:
+      ${transcriptionText}
+
+      Provide a clear and concise answer strictly based on the content of the transcription. Do not infer or assume any information beyond what is explicitly stated. If the transcription does not contain enough information to answer the question, respond with: "No clear answer available from the transcription." Do not alter the meaning of anything said.`;
+
       console.log('Sending request to OpenAI...');
       const completion = await openai.chat.completions.create({
         messages: [{ role: "user", content: prompt }],
@@ -956,7 +961,7 @@ async function analyzeTranscription(transcriptionId, transcriptionText) {
     if (error.response) {
       console.error('OpenAI API response:', error.response.data);
     }
-    
+
     // Update transcription status to failed
     await prisma.transcription.update({
       where: { id: transcriptionId },
@@ -971,7 +976,7 @@ app.post('/process-transcription', async (req, res) => {
   try {
     const { transcriptionId } = req.body;
     console.log(`Received request to process transcription ${transcriptionId}`);
-    
+
     const transcription = await prisma.transcription.findUnique({
       where: { id: transcriptionId },
       include: {
@@ -986,7 +991,7 @@ app.post('/process-transcription', async (req, res) => {
 
     console.log(`Found transcription with text length: ${transcription.text.length}`);
     console.log(`Existing questions: ${transcription.questions.length}`);
-    
+
     // Start analysis in the background
     analyzeTranscription(transcriptionId, transcription.text)
       .catch(error => {

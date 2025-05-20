@@ -10,6 +10,7 @@ import { Phone, PhoneOff, Clock, ArrowRight } from "lucide-react"
 import Link from "next/link"
 import { Device } from "@twilio/voice-sdk"
 import axios from "axios"
+import { API_URL } from "@/config"
 
 export default function DialerPage() {
   const [phoneNumber, setPhoneNumber] = useState("")
@@ -25,7 +26,7 @@ export default function DialerPage() {
   useEffect(() => {
     const initDevice = async () => {
       try {
-        const res = await fetch('http://localhost:5000/token?identity=YashDangar')
+        const res = await fetch(`${API_URL}/token?identity=YashDangar`)
         const data = await res.json()
         console.log('Token response:', data)
 
@@ -112,7 +113,7 @@ export default function DialerPage() {
   useEffect(() => {
     const fetchCallHistory = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/call-history')
+        const response = await fetch(`${API_URL}/api/call-history`)
         if (!response.ok) {
           throw new Error('Failed to fetch call history')
         }
@@ -170,7 +171,7 @@ export default function DialerPage() {
       // Also try the backend hangup if we have a callSid
       if (callSid) {
         try {
-          const response = await axios.post('http://localhost:5000/api/hangup', {
+          const response = await axios.post(`${API_URL}/api/hangup`, {
             callSid: callSid
           })
           console.log('Backend hangup response:', response.data)
