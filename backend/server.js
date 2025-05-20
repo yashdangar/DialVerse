@@ -200,14 +200,8 @@ app.post('/recording-status', async (req, res) => {
         },
       });
 
-      // Ensure temp directory exists
-      const tempDir = path.resolve(__dirname, 'temp');
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-        console.log('Created temp directory:', tempDir);
-      }
-
-      // Create a temporary file path
+      // Use Vercel's /tmp directory for temporary files
+      const tempDir = '/tmp';
       const tempFilePath = path.join(tempDir, `${recordingSid}.mp3`);
       const writer = fs.createWriteStream(tempFilePath);
 
