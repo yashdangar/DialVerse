@@ -23,12 +23,13 @@ import OpenAI from "openai";
 
 // Initialize Prisma client with correct configuration
 const prisma = new PrismaClient({
-  log: ["error", "warn"],
+  log: ['query', 'error', 'warn'],
+  errorFormat: 'pretty',
   datasources: {
     db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
+      url: process.env.DATABASE_URL
+    }
+  }
 });
 
 // Handle Prisma connection errors
