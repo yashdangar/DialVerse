@@ -1,11 +1,11 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Phone } from "lucide-react"
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Phone } from "lucide-react";
 
 export const metadata = {
   title: "Calling Management System",
   description: "A modern web application for managing calls",
-}
+};
 
 export default function HomePage() {
   return (
@@ -20,14 +20,14 @@ export default function HomePage() {
                     Calling Management System
                   </h1>
                   <p className="max-w-[600px] text-muted-foreground md:text-xl">
-                    A modern, clean, and user-friendly web application for managing your calls, recordings, and
-                    transcriptions.
+                    A modern, clean, and user-friendly web application for
+                    managing your calls, recordings, and transcriptions.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 min-[400px]:flex-row">
                   <Link href="/dialer">
                     <Button size="lg" className="gap-1">
-                      <Phone className="h-4 w-4" />
+                      <Phone className="w-4 h-4" />
                       Start Calling
                     </Button>
                   </Link>
@@ -36,16 +36,22 @@ export default function HomePage() {
                       View Numbers
                     </Button>
                   </Link>
+                  <Link href="/redirect-settings">
+                    <Button size="lg" variant="outline">
+                      Redirect Settings
+                    </Button>
+                  </Link>
                 </div>
               </div>
               <div className="flex items-center justify-center">
                 <div className="relative h-[450px] w-full overflow-hidden rounded-xl bg-gradient-to-b from-muted/50 to-muted p-6 shadow-lg">
                   <div className="absolute inset-0 bg-gradient-to-b from-muted/80 to-muted/20 opacity-70"></div>
-                  <div className="relative z-10 flex h-full flex-col items-center justify-center space-y-4 text-center">
-                    <Phone className="h-16 w-16 text-primary" />
+                  <div className="relative z-10 flex flex-col items-center justify-center h-full space-y-4 text-center">
+                    <Phone className="w-16 h-16 text-primary" />
                     <h2 className="text-2xl font-bold">Manage Your Calls</h2>
                     <p className="text-muted-foreground">
-                      Make calls, view history, listen to recordings, and analyze transcriptions all in one place.
+                      Make calls, view history, listen to recordings, and
+                      analyze transcriptions all in one place.
                     </p>
                   </div>
                 </div>
@@ -55,5 +61,5 @@ export default function HomePage() {
         </section>
       </main>
     </div>
-  )
+  );
 }

@@ -109,3 +109,10 @@ enum TranscriptionStatus {
   COMPLETED
   FAILED
 } 
+
+model Redirect {
+  id String @id @default(cuid())
+  number String? @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
