@@ -215,7 +215,7 @@ app.post("/inbound", async (req, res) => {
       forwardToNumber = redirectRecord.number;
       console.log("Found redirect number in DB:", forwardToNumber);
     } else {
-      forwardToNumber = process.env.FORWARD_TO_NUMBER || "+919313932890";
+      forwardToNumber = process.env.FORWARD_TO_NUMBER;
       console.log("Using fallback/env redirect number:", forwardToNumber);
       // Optionally, create a default redirect record if none exists and env var is used
       if (process.env.FORWARD_TO_NUMBER && !redirectRecord) {
